@@ -1,5 +1,5 @@
 import streamlit as st
-from langchain_groq import ChatGroq
+from langchain-groq import ChatGroq
 import PyPDF2
 import io
 import os
