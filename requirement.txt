@@ -8,4 +8,4 @@ faiss-cpu
 openai
 python-dotenv
 tiktoken
-langchain_groq
+langchain-groq
