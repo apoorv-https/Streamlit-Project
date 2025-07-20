@@ -1,11 +1,4 @@
-fastapi
-uvicorn
 langchain
 PyPDF2
-beautifulsoup4
-requests
-faiss-cpu
-openai
 python-dotenv
-tiktoken
 langchain-groq
