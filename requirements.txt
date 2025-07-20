@@ -1,7 +1,8 @@
+uvicorn
 langchain
 PyPDF2
+faiss-cpu
+openai
 python-dotenv
+tiktoken
 langchain-groq
-streamlit
-io
-os
