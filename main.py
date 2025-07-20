@@ -34,6 +34,7 @@ def generate_response(llm, text, option, topic, number):
 
     if option == "Summary":
         prompt = f"""You are a helpful assistant. Please provide a **concise and coherent summary** of the document below. Focus on the main points and keep it in **paragraph form**. 
+        
         **Topic:** {topic} 
         **Document:** {text} 
         **Summary:**"""
@@ -82,7 +83,7 @@ def generate_response(llm, text, option, topic, number):
             elif len(line) > 15:  # Filter out very short lines that might be artifacts
                 summary_lines.append(line)
         
-        # ✅ FIXED: Return statement is now OUTSIDE the for loop
+     
         return '\n\n'.join(summary_lines)
         
     else:  # Questions
@@ -121,6 +122,7 @@ def generate_response(llm, text, option, topic, number):
 
 
 def main():
+    
     st.title("📄 PDF Assistant")
     # Simple selectbox
     option = st.selectbox("Choose what you want:", ["Summary", "Questions"])
@@ -129,12 +131,20 @@ def main():
     if option == "Questions":
         number = st.slider("Select a number", 1, 50, 5)
     else:
-        number = 5  # Default for summary
+        number = 5  
+
     
     # File uploader
     uploaded_file = st.file_uploader("Upload PDF file", type="pdf")
+      
+   
     
-    if uploaded_file and topic:  # ✅ FIXED: Added topic validation
+    if uploaded_file:
+        if uploaded_file.size > 10 * 1024 * 1024:  # 10MB limit
+            st.error("⚠️ File too large! Please upload a PDF smaller than 10MB.")
+            st.stop()
+    
+    if uploaded_file and topic:  
         try:
             # Extract text
             with st.spinner("Processing PDF..."):
@@ -144,7 +154,7 @@ def main():
                 # Generate response
                 llm = initialize_llm()
                 with st.spinner(f"Generating {option.lower()}..."):
-                    result = generate_response(llm, text[:15000], option, topic, number)
+                    result = generate_response(llm, text[:6000], option, topic, number)
 
                 st.write(result)
             else:
