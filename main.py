@@ -33,11 +33,17 @@ def generate_response(llm, text, option, topic, number):
     import re
 
     if option == "Summary":
-        prompt = f"""You are a helpful assistant. Please provide a **concise and coherent summary** of the document below. Focus on the main points and keep it in **paragraph form**. 
-        
-        **Topic:** {topic} 
-        **Document:** {text} 
-        **Summary:**"""
+        if topic.strip():  # If topic is provided
+            prompt = f"""You are a helpful assistant. Please provide a **concise and coherent summary** of the document below. Focus on the main points and keep it in **paragraph form**. 
+            
+            **Topic:** {topic} 
+            **Document:** {text} 
+            **Summary:**"""
+        else:  # If no topic provided, make it generalized
+            prompt = f"""You are a helpful assistant. Please provide a **concise and coherent summary** of the document below. Focus on the main points and key information and keep it in **paragraph form**. 
+            
+            **Document:** {text} 
+            **Summary:**"""
     
         response = llm.invoke(prompt)
         content = response.content
@@ -89,36 +95,98 @@ def generate_response(llm, text, option, topic, number):
     else:  # Questions
         question_placeholders = "\n".join([f"{i+1}." for i in range(number)])
 
-        prompt = f"""You are an expert assistant that creates **{number} educational questions**.
+        if topic.strip():  # If topic is provided
+            prompt = f"""You are an expert assistant that creates educational questions. 
 
-        Given the topic and content below, generate **{number} numbered and relevant questions** that test understanding of the text.
+            Please READ the document content below and CREATE {number} original questions that test understanding of the material related to the topic "{topic}".
 
-        **Topic:** {topic}
+            Generate completely NEW questions based on what you learned from reading the document. DO NOT extract existing questions from the text.
 
-        **Document:**
-        {text}
+            **Document Content:**
+            {text}
 
-        **Questions:**
-        {question_placeholders}
-        """
+            Please generate exactly {number} questions in this format:
+            1. [Your first question here]
+            2. [Your second question here]
+            And so on...
+
+            Focus on creating questions that test comprehension, analysis, and application of the concepts from the document."""
+        else:  # If no topic provided, make it generalized
+            prompt = f"""You are an expert assistant that creates educational questions.
+
+            Please READ the document content below and CREATE {number} original questions that test understanding of the key concepts and information.
+
+            Generate completely NEW questions based on what you learned from reading the document. DO NOT extract existing questions from the text.
+
+            **Document Content:**
+            {text}
+
+            Please generate exactly {number} questions in this format:
+            1. [Your first question here]  
+            2. [Your second question here]
+            And so on...
+
+            Focus on creating questions that test comprehension, analysis, and application of the concepts from the document."""
+            
         response = llm.invoke(prompt)
         content = response.content
         
-        # Extract only numbered questions
+        # Extract and format numbered questions
         lines = content.split('\n')
         questions = []
         
         for line in lines:
             line = line.strip()
-            # Look for numbered questions (dynamic range)
-            if any(line.startswith(f"{i}.") for i in range(1, number + 1)):
-                questions.append(line)
+            
+            # Skip empty lines
+            if not line:
+                continue
+            
+            # Look for numbered questions (more flexible patterns)
+            # Matches: "1.", "1)", "Q1.", "Question 1:", etc.
+            if (re.match(r'^(\d+\.|\d+\)|Q\d+\.|Question\s+\d+:)', line) or
+                any(line.startswith(f"{i}.") or line.startswith(f"{i})") for i in range(1, number + 1))):
+                
+                # Clean up the question format to ensure consistent "Q1.", "Q2." format
+                question_text = re.sub(r'^(\d+\.|\d+\)|Q\d+\.|Question\s+\d+:)\s*', '', line)
+                question_number = len(questions) + 1
+                formatted_question = f"Q{question_number}. {question_text}"
+                questions.append(formatted_question)
+            
+            # Also catch questions that might not be perfectly numbered but contain question content
+            elif line.endswith('?') and len(line) > 10 and len(questions) < number:
+                question_number = len(questions) + 1
+                formatted_question = f"Q{question_number}. {line}"
+                questions.append(formatted_question)
         
-        # If we didn't get expected number of questions, return original content
-        if len(questions) < number:
-            return content
+        # If we got the expected number of questions, return them
+        if len(questions) >= number:
+            return '\n\n'.join(questions[:number])
         
-        return '\n\n'.join(questions[:number])  # Return requested number of questions
+        # If not enough questions found, try a different approach - look for any question-like content
+        all_lines = [line.strip() for line in lines if line.strip()]
+        potential_questions = []
+        
+        for line in all_lines:
+            # Look for any line that could be a question
+            if (len(line) > 15 and 
+                (line.endswith('?') or 
+                 any(word in line.lower() for word in ['what', 'how', 'why', 'when', 'where', 'which', 'who']) or
+                 re.match(r'^\d+', line))):
+                potential_questions.append(line)
+        
+        # Format the potential questions
+        formatted_questions = []
+        for i, question in enumerate(potential_questions[:number]):
+            # Remove any existing numbering
+            clean_question = re.sub(r'^(\d+\.|\d+\)|Q\d+\.|Question\s+\d+:)\s*', '', question)
+            formatted_questions.append(f"Q{i+1}. {clean_question}")
+        
+        if len(formatted_questions) >= number:
+            return '\n\n'.join(formatted_questions[:number])
+        
+        # Last resort - return original content if nothing worked
+        return content
 
 
 def main():
@@ -126,7 +194,7 @@ def main():
     st.title("📄 PDF Assistant")
     # Simple selectbox
     option = st.selectbox("Choose what you want:", ["Summary", "Questions"])
-    topic = st.text_input("Enter the topic")
+    topic = st.text_input("Enter the topic (optional - leave blank for generalize)")
     
     if option == "Questions":
         number = st.slider("Select a number", 1, 50, 5)
@@ -141,10 +209,10 @@ def main():
     
     if uploaded_file:
         if uploaded_file.size > 10 * 1024 * 1024:  # 10MB limit
-            st.error("⚠️ File too large! Please upload a PDF smaller than 10MB.")
+            st.error(" File too large!")
             st.stop()
     
-    if uploaded_file and topic:  
+    if uploaded_file:  # Remove the topic requirement
         try:
             # Extract text
             with st.spinner("Processing PDF..."):
@@ -154,7 +222,7 @@ def main():
                 # Generate response
                 llm = initialize_llm()
                 with st.spinner(f"Generating {option.lower()}..."):
-                    result = generate_response(llm, text[:6000], option, topic, number)
+                    result = generate_response(llm, text[:6000], option, topic if topic else "", number)
 
                 st.write(result)
             else:
@@ -162,9 +230,6 @@ def main():
                 
         except Exception as e:
             st.error(f"Error: {str(e)}")
-    
-    elif uploaded_file and not topic:
-        st.warning("Please enter a topic to proceed")
 
 if __name__ == "__main__":
     main()
