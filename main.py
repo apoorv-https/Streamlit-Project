@@ -9,15 +9,24 @@ load_dotenv()
 # Initialize Groq LLM
 @st.cache_resource
 def initialize_llm():
-    try:
-        return ChatGroq(
-            model="deepseek-r1-distill-llama-70b",
-            temperature=0,
-            groq_api_key=os.getenv("API_KEY")
-        )
-    except Exception as e:
-        st.error(f"Failed to initialize LLM: {str(e)}")
-        return None
+    models = ["gemma2-9b-it", "deepseek-r1-distill-llama-70b"]
+    
+    for model in models:
+        try:
+            return ChatGroq(
+                model=model,
+                temperature=0,
+                groq_api_key=os.getenv("API_KEY")
+            )
+        except Exception as e:
+            if "rate_limit" in str(e).lower():
+                continue
+            else:
+                st.error(f"Failed to initialize {model}: {str(e)}")
+                continue
+    
+    st.error("All models failed or hit rate limits")
+    return None
 
 def extract_text_from_pdf(pdf_file):
     """Extract text from PDF file"""
@@ -58,35 +67,9 @@ def generate_response(llm, text, option, topic, number):
             lines = [line.strip() for line in content.split('\n') if line.strip()]
             return '\n\n'.join(lines)
         
-        else:  # Questions
-            # Simple question formatting
-            lines = content.split('\n')
-            questions = []
-            question_count = 0
+        else:  
             
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                
-                # Check if it's already a question or contains question content
-                if (line[0].isdigit() or line.startswith('Q') or 
-                    line.endswith('?') or any(word in line.lower() for word in ['what', 'how', 'why', 'when', 'where'])):
-                    
-                    question_count += 1
-                    # Remove existing numbering and add consistent format
-                    clean_line = line
-                    if line[0].isdigit():
-                        clean_line = line.split('.', 1)[-1].strip()
-                    if line.startswith('Q'):
-                        clean_line = line.split('.', 1)[-1].strip()
-                    
-                    questions.append(f"Q{question_count}. {clean_line}")
-                    
-                    if question_count >= number:
-                        break
-            
-            return '\n\n'.join(questions) if questions else content
+            return content
     
     except Exception as e:
         st.error(f"Error generating {option.lower()}: {str(e)}")
@@ -108,28 +91,28 @@ def main():
     
     # File size check
     if uploaded_file and uploaded_file.size > 10 * 1024 * 1024:
-        st.error("⚠️ File too large! ")
+        st.error(" File too large! ")
         return
     
-    # Main processing
+   
     if uploaded_file:
-        # Initialize LLM
+     
         llm = initialize_llm()
         if not llm:
             return
         
-        # Extract text
+        
         with st.spinner("Reading PDF..."):
             text = extract_text_from_pdf(uploaded_file)
         
         if not text:
-            st.error("❌ Could not extract text from PDF. Please check if it's a valid PDF with readable text.")
+            st.error(" Please check if it's a valid PDF with readable text.")
             return
         
         if len(text) < 50:
-            st.warning("⚠️ Very little text found in PDF. Results may be limited.")
+            st.warning("Very little text found in PDF. Results may be limited.")
         
-        # Generate response
+      
         with st.spinner(f"Generating {option.lower()}..."):
             # Limit text to avoid token limits
             limited_text = text[:8000] if len(text) > 8000 else text
@@ -139,7 +122,7 @@ def main():
             
             st.write(result)
         else:
-            st.error(f"❌ Failed to generate {option.lower()}. Please try again.")
+            st.error(f" Failed to generate {option.lower()}. Please try again.")
 
 if __name__ == "__main__":
     main()
