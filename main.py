@@ -76,7 +76,7 @@ def generate_response(llm, text, option, topic, number):
         return None
 
 def main():
-    st.title("📄 PDF Assistant")
+    st.title("📄 Ask My PDF")
     
     # UI Elements
     option = st.selectbox("Choose what you want:", ["Summary", "Questions"])
